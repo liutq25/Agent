@@ -1,0 +1,230 @@
+- id: DS-ARRAY-01
+  name: 将随机访问复杂度误用于中间插入
+  concept_ids: [ARRAY_ACCESS, ARRAY_INSERTION, TIME_COMPLEXITY]
+  wrong_belief: 顺序表可以 O(1) 下标访问，所以任意位置插入也是 O(1)。
+  correct_model: 找到位置不等于完成插入，中间插入还要移动元素。
+- id: DS-LINK-02
+  name: 认为链表任意位置插入总是 O(1)
+  concept_ids: [LINKED_LIST_INSERTION, TIME_COMPLEXITY]
+  wrong_belief: 链表只需改指针，按位置插入也总是 O(1)。
+  correct_model: 已有前驱引用时改指针 O(1)，定位前驱可能 O(n)。
+- id: DS-LINK-03
+  name: 认为链表节点连续存储
+  concept_ids: [LINKED_LIST_STRUCTURE]
+  wrong_belief: 链表相邻节点必然在内存中相邻。
+  correct_model: 节点通过引用连接，不要求物理连续。
+- id: DS-STACK-01
+  name: 将栈误作先进先出
+  concept_ids: [STACK_LIFO]
+  wrong_belief: 最早入栈的元素最先弹出。
+  correct_model: 栈是后进先出。
+- id: DS-QUEUE-01
+  name: 将队列误作后进先出
+  concept_ids: [QUEUE_FIFO]
+  wrong_belief: 最后入队的元素最先出队。
+  correct_model: 队列是先进先出。
+- id: DS-BST-02
+  name: 认为普通 BST 查找永远是 O(log n)
+  concept_ids: [BST_SEARCH, BST_HEIGHT, TIME_COMPLEXITY]
+  wrong_belief: 普通 BST 在任何插入顺序下都近似平衡。
+  correct_model: 按序插入可能退化为链，查找最坏 O(n)。
+- id: DS-HEAP-01
+  name: 将堆序误作全局有序
+  concept_ids: [HEAP_PROPERTY, HEAP_SORT_EXTRACTION]
+  wrong_belief: 只要建立了堆，数组中的元素就已经全局排序。
+  correct_model: 堆仅保证父子间偏序；排序需反复取顶并恢复堆。
+- id: DS-ARRAY-02
+  name: 认为顺序表按值查找总是 O(1)
+  concept_ids: [ARRAY_ACCESS, LINEAR_SEARCH]
+  wrong_belief: 可以按下标访问就能立即找到任意值。
+  correct_model: 下标访问 O(1) 不意味着无索引按值查找 O(1)。
+- id: DS-ARRAY-03
+  name: 忽略顺序表删除后的元素移动
+  concept_ids: [ARRAY_DELETION]
+  wrong_belief: 知道删除下标后直接清空该格即可完成删除。
+  correct_model: 保持连续存储时，后续元素通常需要前移。
+- id: DS-ARRAY-04
+  name: 将动态数组单次扩容等同于每次追加代价
+  concept_ids: [ARRAY_AMORTIZED]
+  wrong_belief: 某次扩容 O(n)，所以每次尾部追加都必然 O(n)。
+  correct_model: 倍增扩容时尾部追加摊还 O(1)，单次扩容仍可 O(n)。
+- id: DS-LINK-01
+  name: 结果正确但误认为链表节点连续
+  concept_ids: [LINKED_LIST_INSERTION, LINKED_LIST_STRUCTURE]
+  wrong_belief: 已知前驱时插入 O(1)，因为链表节点连续存放。
+  correct_model: O(1) 来自链接修改，不依赖节点物理连续。
+- id: DS-LINK-04
+  name: 混淆头节点与头指针
+  concept_ids: [LINKED_LIST_HEAD]
+  wrong_belief: 头节点和头指针是同一个对象。
+  correct_model: 头指针保存地址，头节点是可选的实际节点。
+- id: DS-LINK-05
+  name: 链表反转时丢失未处理后继
+  concept_ids: [LINKED_LIST_REVERSE]
+  wrong_belief: 可以先覆盖 next，再去访问原来的后继节点。
+  correct_model: 改变链接前应先保存原后继。
+- id: DS-STACK-02
+  name: 括号匹配只检查左右括号数量
+  concept_ids: [STACK_APPLICATION, STACK_LIFO]
+  wrong_belief: 左右括号数量相等就一定匹配。
+  correct_model: 还须检查类型及嵌套顺序，例如 ([)] 不匹配。
+- id: DS-QUEUE-02
+  name: 循环队列下标不取模
+  concept_ids: [QUEUE_CIRCULAR]
+  wrong_belief: 队尾下标到数组末尾后不能继续复用空位。
+  correct_model: 循环队列通过模容量运算复用数组空间。
+- id: DS-QUEUE-03
+  name: 将双端队列误认为普通 FIFO 队列
+  concept_ids: [DEQUE_OPERATIONS, QUEUE_FIFO]
+  wrong_belief: 双端队列只能队尾入队、队首出队。
+  correct_model: 双端队列支持两端插入与删除。
+- id: DS-TREE-01
+  name: 混淆树的度与高度
+  concept_ids: [TREE_NODE_RELATIONS]
+  wrong_belief: 节点的孩子数量就是整棵树的高度。
+  correct_model: 度是孩子数量，高度与最长根叶路径有关。
+- id: DS-TREE-02
+  name: 将前序和中序遍历混为一谈
+  concept_ids: [BINARY_TREE_TRAVERSAL]
+  wrong_belief: 前序和中序访问节点的顺序总相同。
+  correct_model: 前序先访问根，中序在左右子树之间访问根。
+- id: DS-TREE-03
+  name: 认为仅前序序列能唯一重建任意二叉树
+  concept_ids: [BINARY_TREE_RECONSTRUCTION]
+  wrong_belief: 知道前序遍历就能唯一确定二叉树。
+  correct_model: 一般还需中序等额外信息；值互异时前序加中序可唯一重建。
+- id: DS-BST-01
+  name: 认为普通 BST 会自动保持平衡
+  concept_ids: [BST_INSERTION, BST_HEIGHT]
+  wrong_belief: 任何插入顺序都能得到平衡的普通 BST。
+  correct_model: 有序插入可使普通 BST 退化为链。
+- id: DS-BST-03
+  name: 只检查 BST 的父子关系
+  concept_ids: [BST_PROPERTY]
+  wrong_belief: 每个父节点比左孩子大、比右孩子小就足以保证 BST。
+  correct_model: 所有左子树键都须小于根，右子树键都须大于根，并递归满足。
+- id: DS-BST-04
+  name: 混淆普通 BST 和平衡搜索树
+  concept_ids: [BST_SEARCH, BALANCED_TREE]
+  wrong_belief: 普通 BST 与平衡搜索树的最坏查找复杂度相同。
+  correct_model: 平衡树保持 O(log n) 高度，普通 BST 最坏可 O(n)。
+- id: DS-HEAP-02
+  name: 认为最大堆第二大元素位置固定
+  concept_ids: [HEAP_PROPERTY]
+  wrong_belief: 最大堆第二大元素必在固定的左孩子位置。
+  correct_model: 第二大元素在根的两个孩子之一，位置不固定。
+- id: DS-HEAP-03
+  name: 将建堆误认为排序完成
+  concept_ids: [HEAP_BUILD, HEAP_SORT]
+  wrong_belief: 自底向上建堆完成就得到了完整有序数组。
+  correct_model: 建堆仅建立堆序，堆排序还需逐次取顶调整。
+- id: DS-HEAP-04
+  name: 认为自底向上建堆必然 O(n log n)
+  concept_ids: [HEAP_BUILD, TIME_COMPLEXITY]
+  wrong_belief: 每个节点下沉 O(log n)，所以建堆总是 O(n log n)。
+  correct_model: 大多数节点高度很小，汇总下沉成本为 O(n)。
+- id: DS-HEAP-05
+  name: 堆插入后不执行上浮
+  concept_ids: [HEAP_INSERTION]
+  wrong_belief: 把新元素放到数组尾部后堆性质自动保持。
+  correct_model: 新元素可能破坏父子堆序，需要向上调整。
+- id: DS-GRAPH-01
+  name: 认为 BFS 访问顺序唯一
+  concept_ids: [BFS_TRAVERSAL]
+  wrong_belief: 同一图的 BFS 具体访问序列总唯一。
+  correct_model: 同层节点的访问顺序受邻接表枚举顺序影响。
+- id: DS-GRAPH-02
+  name: 认为 DFS 访问顺序唯一
+  concept_ids: [DFS_TRAVERSAL]
+  wrong_belief: 同一图的 DFS 具体访问序列总唯一。
+  correct_model: DFS 的邻接访问顺序可以改变遍历序列。
+- id: DS-GRAPH-03
+  name: 认为 DFS 必须显式使用栈
+  concept_ids: [DFS_TRAVERSAL, RECURSION_STACK]
+  wrong_belief: 没有显式栈数据结构就无法实现 DFS。
+  correct_model: 递归 DFS 使用调用栈，也可显式维护栈。
+- id: DS-GRAPH-04
+  name: 混淆有向图入度和出度
+  concept_ids: [GRAPH_DEGREE]
+  wrong_belief: 有向图每个节点只需一个度数即可描述所有方向。
+  correct_model: 有向图应区分进入该点的入度和离开该点的出度。
+- id: DS-GRAPH-05
+  name: 将最小生成树误作最短路径树
+  concept_ids: [MST_VS_SHORTEST]
+  wrong_belief: 总边权最小的生成树一定给出源点到各点最短路。
+  correct_model: 两种优化目标不同，最小生成树不保证源点最短路。
+- id: DS-GRAPH-06
+  name: 将 Dijkstra 用于负权边
+  concept_ids: [DIJKSTRA_NONNEGATIVE]
+  wrong_belief: 标准 Dijkstra 可直接处理任意负权边。
+  correct_model: 标准算法要求非负边权。
+- id: DS-GRAPH-07
+  name: 认为有环图也有完整拓扑序
+  concept_ids: [TOPOLOGICAL_SORT]
+  wrong_belief: 任意有向图都能排列成满足全部边方向的拓扑序。
+  correct_model: 有向环使完整拓扑序不存在。
+- id: DS-HASH-01
+  name: 认为哈希冲突说明哈希函数错误
+  concept_ids: [HASH_COLLISION]
+  wrong_belief: 一旦两个键发生冲突，哈希函数就是错误的。
+  correct_model: 有限表空间中冲突可能发生，需要冲突处理策略。
+- id: DS-HASH-02
+  name: 认为哈希查找最坏严格 O(1)
+  concept_ids: [HASH_LOAD_FACTOR, TIME_COMPLEXITY]
+  wrong_belief: 哈希查找在任何输入下都只需要常数时间。
+  correct_model: 平均性能依赖散列分布和装载因子，最坏可退化到 O(n)。
+- id: DS-HASH-03
+  name: 认为只有不同哈希值才会冲突
+  concept_ids: [HASH_COLLISION]
+  wrong_belief: 相同哈希值的不同键不会发生冲突。
+  correct_model: 不同键映射到同一槽位正是哈希冲突。
+- id: DS-HASH-04
+  name: 认为装载因子与性能无关
+  concept_ids: [HASH_LOAD_FACTOR]
+  wrong_belief: 表内元素多少不会影响哈希查找性能。
+  correct_model: 装载因子会影响冲突概率和平均探查长度。
+- id: DS-SORT-01
+  name: 认为快速排序最坏也是 O(n log n)
+  concept_ids: [QUICK_SORT]
+  wrong_belief: 快速排序对所有输入都保持 O(n log n)。
+  correct_model: 极端不平衡分区可使快速排序最坏 O(n²)。
+- id: DS-SORT-02
+  name: 将排序稳定性误作运行稳定
+  concept_ids: [SORT_STABILITY]
+  wrong_belief: 稳定排序是指算法每次运行都不会崩溃。
+  correct_model: 稳定性指相等键元素的原相对顺序保持不变。
+- id: DS-SORT-03
+  name: 认为归并排序数组实现额外空间 O(1)
+  concept_ids: [MERGE_SORT, SPACE_COMPLEXITY]
+  wrong_belief: 常规数组归并排序无需额外存储空间。
+  correct_model: 合并阶段通常使用 O(n) 辅助数组。
+- id: DS-SORT-04
+  name: 认为堆排序稳定
+  concept_ids: [HEAP_SORT, SORT_STABILITY]
+  wrong_belief: 堆排序一定保留相等键的原相对顺序。
+  correct_model: 常规堆排序不稳定。
+- id: DS-SORT-05
+  name: 认为比较次数是排序唯一成本
+  concept_ids: [INSERTION_SORT, BUBBLE_SORT, TIME_COMPLEXITY]
+  wrong_belief: 比较次数更少就必然运行更快。
+  correct_model: 交换、移动、缓存和输入分布也影响运行成本。
+- id: DS-SEARCH-01
+  name: 忽略二分查找的有序前提
+  concept_ids: [BINARY_SEARCH]
+  wrong_belief: 在任意无序数组上也能直接用标准二分查找。
+  correct_model: 标准二分查找需要单调或有序条件。
+- id: DS-SEARCH-02
+  name: 二分查找边界更新错误
+  concept_ids: [BINARY_SEARCH]
+  wrong_belief: 比较后保留不可能的半区也不影响正确性。
+  correct_model: 每轮更新必须排除不可能区间并保证范围收缩。
+- id: DS-STRING-01
+  name: 认为 KMP 失配后主串回退
+  concept_ids: [KMP_PREFIX]
+  wrong_belief: KMP 失配时需要把主串指针退回起点重比。
+  correct_model: KMP 利用模式串前后缀信息调整模式位置，主串指针不回退。
+- id: DS-ANALYSIS-01
+  name: 混淆摊还复杂度和平均复杂度
+  concept_ids: [AMORTIZED_ANALYSIS]
+  wrong_belief: 摊还 O(1) 与随机输入平均 O(1) 是相同定义。
+  correct_model: 摊还是对操作序列总成本分摊，平均复杂度需输入分布假设。

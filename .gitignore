@@ -1,9 +1,0 @@
-.env
-*.db
-*.log
-model_settings.json
-__pycache__/
-.pytest_cache/
-.venv/
-benchmark/results/
-

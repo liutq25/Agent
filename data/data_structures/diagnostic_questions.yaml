@@ -1,0 +1,63 @@
+- id: DIAG-ARRAY-001
+  question: 顺序表有 1000 个元素，已知要在下标 2 插入一个元素。除找到下标外，后续元素要怎样处理？整体最坏复杂度是多少？
+  concept_ids: [ARRAY_ACCESS, ARRAY_INSERTION]
+  diagnostic_targets: [DS-ARRAY-01]
+  discriminates:
+    mastered: 能区分按下标访问 O(1) 与移动元素 O(n)。
+    misconception: 认为定位了下标就完成插入，整体 O(1)。
+  expected_answer: 从下标 2 开始的后续元素要依次后移，最坏 O(n)。
+  follow_up_if_unclear: 如果在第 2 个位置插入，原来的第 2 到第 999 个元素怎么办？
+- id: DIAG-LINK-004
+  question: 只有链表头指针，要在第 100 个节点前插入新节点。定位位置和修改指针各需要多少时间？
+  concept_ids: [LINKED_LIST_INSERTION, TIME_COMPLEXITY]
+  diagnostic_targets: [DS-LINK-02]
+  discriminates:
+    mastered: 能区分定位 O(n) 与已知前驱时改指针 O(1)。
+    misconception: 仍然认为按位置插入全过程 O(1)。
+  expected_answer: 先从头遍历定位，耗时 O(n)；持有前驱后改指针是 O(1)。
+  follow_up_if_unclear: 如果只拿到头指针，怎样找到第 99 个节点？
+- id: DIAG-LINK-005
+  question: 单链表中两个逻辑相邻的节点在内存中必须连续吗？为什么？
+  concept_ids: [LINKED_LIST_STRUCTURE]
+  diagnostic_targets: [DS-LINK-03]
+  discriminates:
+    mastered: 知道由指针连接，不要求物理连续。
+    misconception: 认为链表相邻节点必须占据连续地址。
+  expected_answer: 不必连续；节点通过指针或引用相连。
+  follow_up_if_unclear: 链表靠什么找到下一个节点？
+- id: DIAG-STACK-001
+  question: 栈依次压入 1、2、3，然后连续弹出两次，输出什么？
+  concept_ids: [STACK_LIFO]
+  diagnostic_targets: [DS-STACK-01]
+  discriminates:
+    mastered: 回答 3、2 并说明后进先出。
+    misconception: 回答 1、2 等先进先出顺序。
+  expected_answer: 3、2；栈后进先出。
+  follow_up_if_unclear: 最后一次压入的元素是谁？
+- id: DIAG-QUEUE-001
+  question: 队列依次入队 1、2、3，然后连续出队两次，输出什么？
+  concept_ids: [QUEUE_FIFO]
+  diagnostic_targets: [DS-QUEUE-01]
+  discriminates:
+    mastered: 回答 1、2 并说明先进先出。
+    misconception: 回答 3、2 等后进先出顺序。
+  expected_answer: 1、2；队列先进先出。
+  follow_up_if_unclear: 最先入队的元素是谁？
+- id: DIAG-BST-001
+  question: 把 1、2、3、4、5 按顺序插入一棵普通 BST，它会呈现什么形状？查找 5 的比较次数如何随 n 增长？
+  concept_ids: [BST_SEARCH, BST_HEIGHT]
+  diagnostic_targets: [DS-BST-02]
+  discriminates:
+    mastered: 识别右斜链并指出最坏 O(n)。
+    misconception: 仍认为树自动平衡、查找一定 O(log n)。
+  expected_answer: 退化为向右的链，查找最坏比较 n 次，即 O(n)。
+  follow_up_if_unclear: 插入 5 时要依次经过哪些节点？
+- id: DIAG-HEAP-001
+  question: 最大堆建好后，数组中的元素是否已经从大到小完全排序？取出堆顶后为什么还需要调整？
+  concept_ids: [HEAP_PROPERTY, HEAP_SORT_EXTRACTION]
+  diagnostic_targets: [DS-HEAP-01]
+  discriminates:
+    mastered: 知道堆只满足父子偏序，取顶后需恢复堆序。
+    misconception: 把堆当作完全排序的数组。
+  expected_answer: 没有全局排序；取顶后要下沉等操作恢复堆序。
+  follow_up_if_unclear: 两个不同子树中的叶子节点有大小顺序保证吗？

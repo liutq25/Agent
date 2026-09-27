@@ -1,0 +1,208 @@
+- id: ARRAY_ACCESS
+  name: 顺序表随机访问
+  module: 线性表
+  summary: 连续存储支持通过地址计算在 O(1) 时间按下标访问。
+- id: ARRAY_INSERTION
+  name: 顺序表中间插入
+  module: 线性表
+  summary: 中间插入需移动后续元素，最坏 O(n)。
+- id: LINKED_LIST_STRUCTURE
+  name: 链表节点与指针
+  module: 线性表
+  summary: 节点通过引用相连，不要求连续存储。
+- id: LINKED_LIST_INSERTION
+  name: 链表插入
+  module: 线性表
+  summary: 已持有前驱节点时修改链接为 O(1)，定位前驱可能需要 O(n)。
+- id: STACK_LIFO
+  name: 栈的后进先出
+  module: 栈与队列
+  summary: 最后入栈的元素最先弹出。
+- id: QUEUE_FIFO
+  name: 队列的先进先出
+  module: 栈与队列
+  summary: 最先入队的元素最先出队。
+- id: BST_PROPERTY
+  name: 二叉搜索树性质
+  module: 树
+  summary: 对每个节点，其左子树键小于该节点、右子树键大于该节点，且子树递归满足性质。
+- id: BST_HEIGHT
+  name: 二叉搜索树高度
+  module: 树
+  summary: 不平衡的普通 BST 可能退化为链，高度达到 O(n)。
+- id: BST_SEARCH
+  name: 二叉搜索树查找
+  module: 树
+  summary: 查找复杂度由树高决定，平衡时 O(log n)，最坏退化为 O(n)。
+- id: HEAP_PROPERTY
+  name: 堆序性质
+  module: 堆
+  summary: 最大堆只要求父节点不小于子节点，并不要求整个数组全局有序。
+- id: HEAP_SORT_EXTRACTION
+  name: 堆排序取顶后的调整
+  module: 排序
+  summary: 取出堆顶后需恢复堆序性质，通常要下沉调整。
+- id: TIME_COMPLEXITY
+  name: 时间复杂度与前提
+  module: 分析
+  summary: 复杂度必须说明操作、输入规模和已知条件。
+- id: BINARY_SEARCH
+  name: 二分查找与边界
+  module: 查找
+  summary: 二分查找要求输入有序；循环需正确维护左右边界，并处理空数组和目标不存在的情况。
+- id: ARRAY_DELETION
+  name: 顺序表删除
+  module: 线性表
+  summary: 删除已知下标后，后续元素需要前移，最坏 O(n)。
+- id: LINEAR_SEARCH
+  name: 线性查找
+  module: 查找
+  summary: 无索引的线性表按值查找通常逐个比较，最坏 O(n)。
+- id: LINKED_LIST_DELETION
+  name: 单链表删除
+  module: 线性表
+  summary: 已知前驱时修改链接为 O(1)；按位置查找前驱通常 O(n)。
+- id: LINKED_LIST_HEAD
+  name: 头节点与头指针
+  module: 线性表
+  summary: 头节点可简化边界操作；头指针指向链表起点，两者概念不同。
+- id: LINKED_LIST_REVERSE
+  name: 链表反转
+  module: 线性表
+  summary: 迭代反转需要逐个改变 next 指向，并保存尚未处理的后继。
+- id: ARRAY_AMORTIZED
+  name: 动态数组摊还复杂度
+  module: 线性表
+  summary: 扩容可能单次 O(n)，倍增策略下尾部追加摊还 O(1)。
+- id: STACK_APPLICATION
+  name: 栈与括号匹配
+  module: 栈与队列
+  summary: 遇到右括号时须匹配最近未闭合的左括号。
+- id: QUEUE_CIRCULAR
+  name: 循环队列
+  module: 栈与队列
+  summary: 数组队列首尾下标按容量取模，区分队满与队空需额外约定。
+- id: DEQUE_OPERATIONS
+  name: 双端队列
+  module: 栈与队列
+  summary: 双端队列允许在两端插入和删除，不能等同于普通 FIFO 队列。
+- id: TREE_NODE_RELATIONS
+  name: 树的节点关系
+  module: 树
+  summary: 父、子、兄弟、叶子与度是不同概念；根没有父节点。
+- id: BINARY_TREE_TRAVERSAL
+  name: 二叉树遍历
+  module: 树
+  summary: 前序、中序、后序的根访问位置不同；同层访问是层序遍历。
+- id: BINARY_TREE_RECONSTRUCTION
+  name: 二叉树重建
+  module: 树
+  summary: 带互异值的前序与中序可唯一确定二叉树；仅前序通常不够。
+- id: BST_INSERTION
+  name: BST 插入
+  module: 树
+  summary: 新键按比较结果沿左或右子树下降，普通 BST 不会自动平衡。
+- id: BALANCED_TREE
+  name: 平衡搜索树
+  module: 树
+  summary: 平衡条件使树高维持 O(log n)，普通 BST 不保证这一点。
+- id: HEAP_INSERTION
+  name: 堆插入
+  module: 堆
+  summary: 新元素先放末尾，再向上调整，单次复杂度 O(log n)。
+- id: HEAP_BUILD
+  name: 自底向上建堆
+  module: 堆
+  summary: 从最后一个非叶节点向前下沉，自底向上建堆总时间 O(n)。
+- id: HEAP_SORT
+  name: 堆排序
+  module: 排序
+  summary: 建堆 O(n)，反复交换堆顶并下沉，总时间 O(n log n)，通常不稳定。
+- id: GRAPH_REPRESENTATION
+  name: 图的存储表示
+  module: 图
+  summary: 邻接表适合稀疏图；邻接矩阵访问边方便但通常占 O(V²) 空间。
+- id: GRAPH_DEGREE
+  name: 图的度
+  module: 图
+  summary: 有向图区分入度与出度；无向图每条边计入两个端点的度。
+- id: BFS_TRAVERSAL
+  name: 广度优先遍历
+  module: 图
+  summary: BFS 用队列逐层扩展，访问顺序受相邻节点枚举顺序影响。
+- id: DFS_TRAVERSAL
+  name: 深度优先遍历
+  module: 图
+  summary: DFS 可用递归调用栈或显式栈实现，访问顺序受邻接顺序影响。
+- id: TOPOLOGICAL_SORT
+  name: 拓扑排序
+  module: 图
+  summary: 有向无环图可拓扑排序；存在有向环时不存在完整拓扑序。
+- id: SHORTEST_PATH_BFS
+  name: 无权图最短路
+  module: 图
+  summary: BFS 第一次到达顶点时的层数是无权图最少边数。
+- id: DIJKSTRA_NONNEGATIVE
+  name: Dijkstra 前提
+  module: 图
+  summary: 标准 Dijkstra 要求边权非负，不能直接处理负权边。
+- id: MST_VS_SHORTEST
+  name: 最小生成树与最短路
+  module: 图
+  summary: 最小生成树最小化整棵树边权和，最短路最小化指定路径权重。
+- id: HASH_COLLISION
+  name: 哈希冲突
+  module: 哈希
+  summary: 不同键可能映射到同一位置，冲突不是哈希函数必然错误。
+- id: HASH_LOAD_FACTOR
+  name: 哈希装载因子
+  module: 哈希
+  summary: 装载因子影响冲突概率和平均性能；最坏查找仍可能 O(n)。
+- id: HASH_COLLISION_RESOLUTION
+  name: 哈希冲突处理
+  module: 哈希
+  summary: 链地址与开放定址等策略都需处理冲突，删除规则依策略不同。
+- id: SORT_STABILITY
+  name: 排序稳定性
+  module: 排序
+  summary: 稳定排序保持相等键元素的原有相对顺序。
+- id: INSERTION_SORT
+  name: 插入排序
+  module: 排序
+  summary: 将当前元素插入已排序前缀，最坏 O(n²)，通常稳定。
+- id: BUBBLE_SORT
+  name: 冒泡排序
+  module: 排序
+  summary: 相邻逆序元素交换；最坏 O(n²)，无交换可提前结束。
+- id: QUICK_SORT
+  name: 快速排序
+  module: 排序
+  summary: 分区后递归处理两侧；平均 O(n log n)，极端分区可退化到 O(n²)。
+- id: MERGE_SORT
+  name: 归并排序
+  module: 排序
+  summary: 分治并合并有序段，时间 O(n log n)，常规数组实现需 O(n) 额外空间。
+- id: SORT_LOWER_BOUND
+  name: 比较排序下界
+  module: 排序
+  summary: 基于比较的通用排序最坏比较次数下界为 Ω(n log n)。
+- id: KMP_PREFIX
+  name: KMP 前缀函数
+  module: 串
+  summary: 失配时利用模式串前后缀信息跳转，避免主串指针回退。
+- id: STRING_MATCHING
+  name: 字符串匹配
+  module: 串
+  summary: 匹配复杂度取决于算法及主串、模式串长度。
+- id: RECURSION_STACK
+  name: 递归调用栈
+  module: 分析
+  summary: 递归会使用调用栈，空间复杂度与最大递归深度有关。
+- id: AMORTIZED_ANALYSIS
+  name: 摊还分析
+  module: 分析
+  summary: 摊还复杂度描述操作序列的平均分摊成本，不等于随机输入的平均复杂度。
+- id: SPACE_COMPLEXITY
+  name: 额外空间复杂度
+  module: 分析
+  summary: 额外空间需明确是否计入输入与输出，递归栈也可能贡献空间成本。
