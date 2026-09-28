@@ -47,6 +47,8 @@ class OpenAICompatibleEmbeddingProvider:
 def get_embedding_provider():
     """Return None when no embedding service is configured; lexical retrieval remains available."""
     load_local_env()
+    if os.getenv("EMBEDDING_PROVIDER", "openai_compatible") != "openai_compatible":
+        return None
     model, url, key = (os.getenv("EMBEDDING_MODEL", ""),
                        os.getenv("EMBEDDING_BASE_URL", ""), os.getenv("EMBEDDING_API_KEY", ""))
     if model and url and key:
