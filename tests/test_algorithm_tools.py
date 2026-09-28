@@ -94,3 +94,15 @@ def test_chat_calls_real_algorithm_tool_and_records_event(tmp_path, monkeypatch)
     trace = client.get(f"/api/trace/{result['trace_id']}").json()
     assert "TOOL_REQUESTED" in [event["event_type"] for event in trace["events"]]
     assert "TOOL_RESULT" in [event["event_type"] for event in trace["events"]]
+
+
+def test_protocol_without_native_tools_keeps_chat_available():
+    import asyncio
+    from app.tool_routing import select_and_run_tool
+
+    class Provider:
+        capabilities = {"tool_calling": False}
+        async def chat_with_tools(self, *args, **kwargs):
+            raise AssertionError("unsupported native tool call")
+
+    assert asyncio.run(select_and_run_tool(Provider(), "请模拟堆排序 [3,1,2] 的每一步")) is None

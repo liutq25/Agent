@@ -1,0 +1,27 @@
+# Original Chinese teaching summaries; links point to openly published source pages.
+# These are reference materials, not teacher-reviewed local course content.
+- id: ODSA_HEAP
+  title: 堆与优先队列（OpenDSA）
+  url: https://opendsa.cs.vt.edu/OpenDSA/Books/Catalog/html/Heaps.html
+  license: MIT
+  content: 最大堆是完全二叉树，并满足每个父节点不小于其子节点。堆顶是全局最大值，但其他位置没有全局排序保证。建堆后仍须重复取顶并恢复堆序才能完成堆排序。
+- id: ODSA_BST
+  title: 二叉搜索树（OpenDSA）
+  url: https://opendsa.cs.vt.edu/OpenDSA/Books/Catalog/html/BST.html
+  license: MIT
+  content: 二叉搜索树的左子树键不大于根，右子树键大于根。中序遍历可得到有序序列。查找代价取决于树高，普通二叉搜索树在不利插入顺序下可能退化。
+- id: ODSA_BINARY_SEARCH
+  title: 有序数组查找（OpenDSA）
+  url: https://opendsa.cs.vt.edu/OpenDSA/Books/Catalog/html/SortedSearch.html
+  license: MIT
+  content: 二分查找依赖有序数据，通过比较中间元素不断缩小候选区间；在可随机访问的有序数组中比较次数随规模呈对数增长。按下标访问与按值查找是不同操作。
+- id: ODSA_SORTING
+  title: 排序算法目录（OpenDSA）
+  url: https://opendsa.cs.vt.edu/OpenDSA/Books/Catalog/html/index.html
+  license: MIT
+  content: 插入排序、冒泡排序、归并排序、快速排序和堆排序的步骤与性能条件各不相同。分析复杂度时要区分建堆阶段、反复取顶阶段、平均情况和最坏情况。
+- id: ODS_ARRAY
+  title: Open Data Structures 开放教材
+  url: https://opendatastructures.org/
+  license: CC BY
+  content: 顺序表支持按下标常数时间访问，但中间插入或删除通常需要移动一段元素。链表在已知前驱节点时可常数时间改链接，按位置定位仍可能线性扫描。

@@ -52,7 +52,9 @@ PARAMETERS = {
 
 
 async def select_and_run_tool(provider, text: str) -> dict | None:
-    if isinstance(provider, MockProvider) or not re.search(r"模拟|轨迹|逐步|每一步|步骤|运行过程", text):
+    if (isinstance(provider, MockProvider) or
+        not getattr(provider, "capabilities", {}).get("tool_calling", True) or
+        not re.search(r"模拟|轨迹|逐步|每一步|步骤|运行过程", text)):
         return None
     candidates = [name for name, aliases in TOOL_TOPICS.items()
                   if any(alias.lower() in text.lower() for alias in aliases)]
@@ -62,9 +64,12 @@ async def select_and_run_tool(provider, text: str) -> dict | None:
         "name": name, "description": "计算 " + name + " 的确定性操作轨迹；仅在输入足够具体时调用。",
         "parameters": {"type": "object", "properties": PARAMETERS[name],
                        "required": list(PARAMETERS[name])}}} for name in candidates[:3]]
-    message = await provider.chat_with_tools([{"role": "user", "content":
-        "如果学生给出具体输入并要求算法步骤，请选择一个合适的工具并填入参数。"
-        "若输入不足，不调用工具。学生原话：" + text}], tools, tool_choice="auto")
+    try:
+        message = await provider.chat_with_tools([{"role": "user", "content":
+            "如果学生给出具体输入并要求算法步骤，请选择一个合适的工具并填入参数。"
+            "若输入不足，不调用工具。学生原话：" + text}], tools, tool_choice="auto")
+    except NotImplementedError:
+        return None
     for call in message.get("tool_calls", []) if isinstance(message, dict) else []:
         func = call.get("function", {})
         name = func.get("name")

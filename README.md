@@ -45,7 +45,9 @@ Windows 简便入口：双击项目中的 `启动知学.cmd`，或运行 `powers
 
 ## 明确未完成
 
-本项目处于可运行原型阶段。目录数量已达 52 个概念、46 个误区，但新扩展内容是**工程草案，尚未由教师审定**；现有固定诊断题仍只有 7 道，目录外问题依靠模型动态生成。文档列出的 22 个首版算法工具目前完成 22 个，LangGraph interrupt/checkpointer、Embedding RAG、至少 120 条人工审核的正式 Benchmark、生产身份认证和真实教学实验尚未完成。Mock 模式只对少数已编写规则的核验题给出判断，对目录外或复杂自由回答仍会保持不确定；真实 API 模式下的诊断结果仍需教师标注集验证。页面输入的学生 ID 仅供本地演示，未做权限隔离。
+本项目处于可运行原型阶段。目录数量已达 52 个概念、46 个误区，但新扩展内容是**工程草案，尚未由教师审定**；现有固定诊断题仍只有 7 道，目录外问题依靠模型动态生成。22 个首版确定性算法工具已实现。核验题已接入 LangGraph interrupt/SQLite checkpointer；课程资料可分片检索并显示来源，另有可选的 OpenAI 兼容 Embedding 服务（`EMBEDDING_MODEL`、`EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`）。未设置 Embedding 时使用文本检索。公开课程摘要的源链接见 `data/data_structures/open_resources.yaml`。
+
+教师页面、课程资料上传和模型设置接口可使用 `COGNITUTOR_ADMIN_TOKEN` 设置访问口令；未设置时仅适合本机演示。学生 ID 仍不是正式身份认证，不能直接对公网开放或存放真实学生隐私数据。至少 120 条人工审核的正式 Benchmark、完整 LangGraph 教学流程、真实 Embedding 服务验收和课堂实验仍需完成。`benchmark/review_candidates.jsonl` 有 46 条自动生成、明确标为 `REVIEW_REQUIRED` 的候选；`python -m benchmark.review validate benchmark/review_candidates.jsonl` 会拒绝它作为正式评测。`experiments/` 是空白教学试用模板；公开资源不能代替教师审核。
 
 架构与上游选择见 `docs/upstream_evaluation.md`。许可说明见 `THIRD_PARTY_NOTICES.md`。当前状态见 `PROJECT_STATUS.md`。
 三项创新点的当前实现与验证边界见 `docs/innovation_alignment.md`。

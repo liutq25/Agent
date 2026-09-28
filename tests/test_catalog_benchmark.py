@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.diagnostic_pipeline import CONCEPTS, MISCONCEPTIONS
 from benchmark.evaluate import evaluate, score
+from benchmark.review import candidate_rows, validate_formal
 
 
 def test_curriculum_catalog_integrity():
@@ -25,3 +26,11 @@ def test_demo_benchmark_stays_labeled_and_saves_real_predictions():
     assert all("prediction" in row and "case" in row for row in report["rows"])
     assert 0 <= report["metrics"]["evidence_grounding_rate"] <= 1
     assert score(report["rows"])["case_count"] == 4
+
+
+def test_generated_candidates_cannot_pass_formal_review():
+    rows = candidate_rows()
+    assert len(rows) >= 40
+    problems = validate_formal(rows)
+    assert problems
+    assert any("TEACHER_REVIEWED" in problem for problem in problems)

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from app.diagnostic_pipeline import analyze_turn
 from app.providers import MockProvider, get_provider
+from benchmark.review import validate_formal
 
 
 def _f1(predicted: set[str], expected: set[str]) -> float:
@@ -50,6 +51,12 @@ def score(rows: list[dict]) -> dict:
 
 
 async def evaluate(cases: list[dict], mode: str) -> dict:
+    if not cases:
+        raise ValueError("没有可评测案例")
+    if not all(case.get("label") == "DEMO" for case in cases):
+        problems = validate_formal(cases)
+        if problems:
+            raise ValueError("正式评测集未通过审核校验：" + problems[0])
     provider = MockProvider() if mode == "mock" else get_provider()
     rows = []
     for case in cases:
@@ -58,7 +65,7 @@ async def evaluate(cases: list[dict], mode: str) -> dict:
         rows.append({"case": case, "prediction": result})
     return {"timestamp": datetime.now(timezone.utc).isoformat(),
             "model": getattr(provider, "model", "unknown"), "mode": mode,
-            "dataset_label": "DEMO" if all(case.get("label") == "DEMO" for case in cases) else "REVIEW_REQUIRED",
+            "dataset_label": "DEMO" if all(case.get("label") == "DEMO" for case in cases) else "TEACHER_REVIEWED",
             "metrics": score(rows), "rows": rows}
 
 

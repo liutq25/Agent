@@ -1,17 +1,21 @@
 import json
+import hmac
 import os
 import re
 import sqlite3
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends, Request
 import httpx
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, Field, ValidationError
 from .core import CONCEPTS, MISCONCEPTIONS, QUESTIONS, diagnose, recommend, simulate
-from .providers import get_provider, create_provider
+from .providers import get_provider, create_provider, get_embedding_provider
+from .config import load_local_env
+from .retrieval import chunks, retrieve, format_context, open_resources
+from .tutor_graph import begin_probe, finish_probe
 from .model_settings import ModelSettings, DEFAULT_URLS, load_settings, save_settings, public_settings, get_key, delete_key
 from .conversation import answer_question, is_coding_request
 from .code_lab import EXERCISES as CODE_EXERCISES, sandbox_ready, run_tests, feedback as code_feedback
@@ -25,6 +29,16 @@ app = FastAPI(title="知学 CogniTutor-DS", version="0.1.0")
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 
 
+def require_admin(request: Request, x_admin_token: str | None = Header(default=None)):
+    """Opt-in token for teacher data and local model configuration."""
+    load_local_env()
+    expected = os.getenv("COGNITUTOR_ADMIN_TOKEN", "")
+    if expected and not hmac.compare_digest(x_admin_token or "", expected):
+        raise HTTPException(403, "需要有效的教师访问口令")
+    if not expected and request.client and request.client.host not in {"127.0.0.1", "::1", "testclient"}:
+        raise HTTPException(403, "远程访问教师数据前必须配置 COGNITUTOR_ADMIN_TOKEN")
+
+
 def db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
@@ -35,6 +49,7 @@ def db():
     CREATE TABLE IF NOT EXISTS student_concept_state(student_id TEXT NOT NULL, concept_id TEXT NOT NULL, mastery REAL NOT NULL, PRIMARY KEY(student_id, concept_id));
     CREATE TABLE IF NOT EXISTS student_misconception_state(student_id TEXT NOT NULL, misconception_id TEXT NOT NULL, risk REAL NOT NULL, PRIMARY KEY(student_id, misconception_id));
     CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS document_vectors(source_id TEXT PRIMARY KEY, vector_json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS chat_sessions(id TEXT PRIMARY KEY, student_id TEXT NOT NULL, class_id TEXT NOT NULL, pending_json TEXT, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS chat_messages(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, meta_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS code_submissions(id TEXT PRIMARY KEY, student_id TEXT NOT NULL, class_id TEXT NOT NULL, exercise_id TEXT NOT NULL, source TEXT NOT NULL, result_json TEXT NOT NULL, feedback TEXT NOT NULL, hint_stage INTEGER NOT NULL, created_at TEXT NOT NULL);
@@ -65,8 +80,25 @@ class MessageInput(BaseModel):
 
 
 class DocumentInput(BaseModel):
-    title: str
-    content: str
+    title: str = Field(min_length=1, max_length=200)
+    content: str = Field(min_length=1, max_length=100000)
+
+
+async def course_context(connection, query: str) -> list[dict]:
+    documents = [{"id": row["id"], "title": row["title"], "content": row["content"]}
+                 for row in connection.execute("SELECT * FROM documents")]
+    embedder = get_embedding_provider()
+    vector = None
+    vectors = {}
+    if embedder:
+        rows = connection.execute("SELECT source_id,vector_json FROM document_vectors").fetchall()
+        if rows:
+            try:
+                vector = await embedder.embed_query(query)
+                vectors = {row["source_id"]: json.loads(row["vector_json"]) for row in rows}
+            except (httpx.HTTPError, ValueError, RuntimeError):
+                vector = None
+    return retrieve(query, documents + open_resources(), query_vector=vector, vectors=vectors)
 
 
 class ChatSessionInput(BaseModel):
@@ -180,6 +212,7 @@ async def chat_message(session_id: str, body: ChatMessageInput):
             if pending.get("trace_id"):
                 recorder.set_status(pending["trace_id"], status="ABORTED", confidence=0,
                                     action="STUDENT_CHANGED_TOPIC", outcome="INTERRUPTED")
+            finish_probe(session_id, cancelled=True, path=DB_PATH.with_name(DB_PATH.stem + "_graph.db"))
             pending = None
         followup = bool(last_assistant and asks_for_explanation(body.content))
         try:
@@ -238,16 +271,18 @@ async def chat_message(session_id: str, body: ChatMessageInput):
                 teaching_topic = prior_concepts[0]["id"] if prior_concepts else "GENERAL"
                 code_stage = coding_hint_stage(connection, session_id, teaching_topic)
                 coding_context = is_coding_request(body.content) or is_coding_request(topic)
+                course_hits = await course_context(connection, topic + " " + body.content)
                 reply = await answer_question(provider, body.content, history, cards,
                     context_hint=f"当前追问延续上一主题。上一轮学生原话：{topic}。"
-                                 "请解释原理、关键步骤和复杂度；不要转到其他数据结构，也不要出新题。",
+                                 "请解释原理、关键步骤和复杂度；不要转到其他数据结构，也不要出新题。\n"
+                                 + format_context(course_hits),
                     code_stage=code_stage, coding_context=coding_context)
                 analysis = {"concepts": prior_concepts, "evidence": [], "hypotheses": [],
                             "gate": "EXPLAIN", "question": None}
                 diagnosis = {"status": "EXPLAINED", **analysis}
                 next_pending = None
                 response = {"mode": "answer", "answer": reply, "probe": None,
-                            "diagnosis": diagnosis, "sources": cards,
+                            "diagnosis": diagnosis, "sources": cards, "retrieved_sources": course_hits,
                             "model_mode": "mock" if provider.__class__.__name__ == "MockProvider" else "api"}
                 if coding_context:
                     response.update({"teaching_topic": teaching_topic,
@@ -269,8 +304,10 @@ async def chat_message(session_id: str, body: ChatMessageInput):
                                             "steps": tool_run["trace"]["steps"][:15],
                                             "final_result": tool_run["trace"]["final_result"]}, ensure_ascii=False)
                                 if tool_run else "")
+                course_hits = await course_context(connection, body.content + " " + context[-500:])
                 explanation = await answer_question(provider, body.content, history, cards,
-                                                    context_hint=tool_context, code_stage=code_stage)
+                                                    context_hint=tool_context + "\n" + format_context(course_hits),
+                                                    code_stage=code_stage)
                 analysis = await analyze_turn(provider, body.content, used, context=context)
                 analysis["tool_run"] = tool_run
                 question = analysis["question"]
@@ -297,7 +334,7 @@ async def chat_message(session_id: str, body: ChatMessageInput):
                              "concepts": analysis["concepts"], "evidence": analysis["evidence"],
                              "hypotheses": analysis["hypotheses"], "gate": analysis["gate"]}
                 response = {"mode": "answer", "answer": reply, "probe": question, "diagnosis": diagnosis,
-                            "sources": cards,
+                            "sources": cards, "retrieved_sources": course_hits,
                             "model_mode": "mock" if provider.__class__.__name__ == "MockProvider" else "api"}
                 if tool_run:
                     response["tool_result"] = {"algorithm": tool_run["tool_name"],
@@ -432,6 +469,16 @@ async def chat_message(session_id: str, body: ChatMessageInput):
                 recorder.set_status(trace_id, status="COMPLETED", confidence=trace_confidence,
                                     action="EXPLAIN" if verification["outcome"] == "GAP" else "VERIFY",
                                     outcome=trace_outcome)
+        graph_path = DB_PATH.with_name(DB_PATH.stem + "_graph.db")
+        if pending:
+            finish_probe(session_id, answer=body.content, outcome=verification["outcome"],
+                         confidence=verification["confidence"], path=graph_path)
+            if next_pending:
+                followup_question = {**next_pending["question"],
+                                     "question": next_pending["question"]["follow_up_if_unclear"]}
+                begin_probe(session_id, session["student_id"], followup_question, path=graph_path)
+        elif next_pending:
+            begin_probe(session_id, session["student_id"], next_pending["question"], path=graph_path)
         return response
 
 
@@ -449,8 +496,14 @@ def profile(connection, student_id):
     for item in diagnoses:
         if item["issue_key"] in MISCONCEPTION_BY_ID:
             risks[item["issue_key"]] = item["risk"]
+    stages = [row[0] for row in connection.execute(
+        "SELECT hint_stage FROM code_submissions WHERE student_id=? ORDER BY created_at,rowid", (student_id,))]
+    # Descriptive assistance signal, not a calibrated psychological trait.
+    support = {"sample_count": len(stages),
+               "mean_hint_level": round(sum(stages) / len(stages), 3) if stages else None,
+               "recent_mean_hint_level": round(sum(stages[-5:]) / len(stages[-5:]), 3) if stages else None}
     return {"student_id": student_id, "mastery": mastery, "concept_state": concept_state,
-            "misconception_risk": risks, "diagnoses": diagnoses}
+            "misconception_risk": risks, "diagnoses": diagnoses, "support_dependency": support}
 
 
 @app.get("/api/health")
@@ -470,12 +523,12 @@ def model_status():
             "has_key": bool(getattr(provider, "key", ""))}
 
 
-@app.get("/api/system/model-settings")
+@app.get("/api/system/model-settings", dependencies=[Depends(require_admin)])
 def model_settings_get():
     return {"settings": public_settings(load_settings() or ModelSettings()), "defaults": DEFAULT_URLS}
 
 
-@app.put("/api/system/model-settings")
+@app.put("/api/system/model-settings", dependencies=[Depends(require_admin)])
 def model_settings_put(body: ModelSettingsInput):
     try:
         settings = body.settings()
@@ -488,7 +541,7 @@ def model_settings_put(body: ModelSettingsInput):
     return public_settings(settings)
 
 
-@app.delete("/api/system/model-settings/key")
+@app.delete("/api/system/model-settings/key", dependencies=[Depends(require_admin)])
 def model_settings_delete_key():
     settings = load_settings()
     if not settings or settings.protocol == "mock":
@@ -497,7 +550,7 @@ def model_settings_delete_key():
     return public_settings(settings)
 
 
-@app.post("/api/system/model-settings/test")
+@app.post("/api/system/model-settings/test", dependencies=[Depends(require_admin)])
 async def model_settings_test(body: ModelSettingsInput):
     try:
         settings = body.settings()
@@ -546,7 +599,7 @@ def algorithm_trace(body: AlgorithmRunInput):
     return {"run_id": run_id, "trace": trace, "comparison": comparison}
 
 
-@app.get("/api/class/{class_id}/algorithm-runs")
+@app.get("/api/class/{class_id}/algorithm-runs", dependencies=[Depends(require_admin)])
 def class_algorithm_runs(class_id: str, limit: int = 30):
     with db() as connection:
         rows = connection.execute("SELECT id,student_id,tool_name,comparison_json,created_at "
@@ -593,7 +646,7 @@ def code_submit(body: CodeSubmissionInput):
                 "hint_stage": stage + 1, "recorded": True}
 
 
-@app.get("/api/class/{class_id}/code-activity")
+@app.get("/api/class/{class_id}/code-activity", dependencies=[Depends(require_admin)])
 def class_code_activity(class_id: str, limit: int = 30):
     with db() as connection:
         rows = connection.execute("SELECT id,student_id,exercise_id,source,result_json,feedback,hint_stage,created_at "
@@ -606,7 +659,7 @@ def class_code_activity(class_id: str, limit: int = 30):
                  "created_at": row["created_at"]} for row in rows]
 
 
-@app.get("/api/class/{class_id}/learning-activity")
+@app.get("/api/class/{class_id}/learning-activity", dependencies=[Depends(require_admin)])
 def class_learning_activity(class_id: str, limit: int = 30):
     with db() as connection:
         rows = connection.execute(
@@ -739,23 +792,36 @@ def questions_recommend(student_id: str = "demo-student"):
     with db() as connection: return recommend(profile(connection, student_id))
 
 
-@app.post("/api/documents")
-def add_document(body: DocumentInput):
+@app.post("/api/documents", dependencies=[Depends(require_admin)])
+async def add_document(body: DocumentInput):
     doc_id = str(uuid.uuid4())
-    with db() as connection: connection.execute("INSERT INTO documents VALUES(?,?,?)", (doc_id, body.title, body.content))
-    return {"id": doc_id}
+    parts = chunks(body.content)
+    embedder = get_embedding_provider()
+    vectors = None
+    if embedder:
+        try:
+            vectors = await embedder.embed_documents(parts)
+        except (httpx.HTTPError, ValueError, RuntimeError) as error:
+            raise HTTPException(503, "Embedding 服务不可用，资料未保存") from error
+    with db() as connection:
+        connection.execute("INSERT INTO documents VALUES(?,?,?)", (doc_id, body.title, body.content))
+        for i, vector in enumerate(vectors or []):
+            connection.execute("INSERT INTO document_vectors VALUES(?,?)",
+                               (f"{doc_id}#{i+1}", json.dumps(vector)))
+    return {"id": doc_id, "chunks": len(parts), "embedded": bool(vectors)}
 
 
 @app.get("/api/course/search")
 def search_course(q: str):
-    terms = [term for term in q.lower().split() if term]
-    cards = [{"id": key, **value} for key, value in CONCEPTS.items()]
+    cards = [{"id": key, "title": value["name"], "content": value["summary"], "kind": "concept"}
+             for key, value in CONCEPT_BY_ID.items()]
     with db() as connection:
-        docs = [{"id": row["id"], "name": row["title"], "card": row["content"]} for row in connection.execute("SELECT * FROM documents")]
-    return sorted(cards + docs, key=lambda item: sum(term in (item["name"] + item["card"]).lower() for term in terms), reverse=True)[:5]
+        docs = [{"id": row["id"], "title": row["title"], "content": row["content"]}
+                for row in connection.execute("SELECT * FROM documents")]
+    return retrieve(q, cards + docs + open_resources(), limit=5)
 
 
-@app.get("/api/class/{class_id}/dashboard")
+@app.get("/api/class/{class_id}/dashboard", dependencies=[Depends(require_admin)])
 def class_dashboard(class_id: str):
     with db() as connection:
         students = [r[0] for r in connection.execute(
@@ -765,7 +831,7 @@ def class_dashboard(class_id: str):
         return {"class_id": class_id, "student_count": len(students), "students": [profile(connection, s) for s in students]}
 
 
-@app.get("/api/class/{class_id}/misconceptions")
+@app.get("/api/class/{class_id}/misconceptions", dependencies=[Depends(require_admin)])
 def class_misconceptions(class_id: str):
     with db() as connection:
         rows = connection.execute("SELECT d.issue_key AS misconception_id, d.issue_name, d.status, COUNT(*) AS student_count, AVG(d.risk) AS average_risk FROM student_misconception_diagnosis d JOIN (SELECT student_id FROM sessions WHERE class_id=? UNION SELECT student_id FROM chat_sessions WHERE class_id=?) s USING(student_id) GROUP BY d.issue_key,d.issue_name,d.status ORDER BY average_risk DESC", (class_id, class_id)).fetchall()
@@ -773,14 +839,14 @@ def class_misconceptions(class_id: str):
         return [dict(row) for row in rows] + [{**dict(row), "issue_name": row["misconception_id"], "status": "LEGACY"} for row in old]
 
 
-@app.get("/api/class/{class_id}/emerging-issues")
+@app.get("/api/class/{class_id}/emerging-issues", dependencies=[Depends(require_admin)])
 def emerging_issues(class_id: str):
     with db() as connection:
         rows = connection.execute("SELECT d.issue_key,d.issue_name,COUNT(*) AS student_count,AVG(d.risk) AS average_risk FROM student_misconception_diagnosis d JOIN (SELECT student_id FROM sessions WHERE class_id=? UNION SELECT student_id FROM chat_sessions WHERE class_id=?) s USING(student_id) WHERE d.issue_key LIKE 'OPEN:%' GROUP BY d.issue_key,d.issue_name ORDER BY student_count DESC,average_risk DESC", (class_id, class_id)).fetchall()
         return [dict(row) for row in rows]
 
 
-@app.get("/api/class/{class_id}/traces")
+@app.get("/api/class/{class_id}/traces", dependencies=[Depends(require_admin)])
 def class_traces(class_id: str, limit: int = 30):
     limit = max(1, min(limit, 100))
     with db() as connection:
@@ -791,7 +857,7 @@ def class_traces(class_id: str, limit: int = 30):
         return [dict(row) for row in rows]
 
 
-@app.get("/api/trace/{trace_id}")
+@app.get("/api/trace/{trace_id}", dependencies=[Depends(require_admin)])
 def diagnostic_trace_detail(trace_id: str):
     with db() as connection:
         trace = DiagnosticTraceRecorder(connection).get_trace(trace_id)

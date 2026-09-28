@@ -49,7 +49,7 @@ def main() -> int:
     if port_in_use():
         notice(f"端口 {PORT} 已被其他程序占用。请关闭占用程序后重试。")
         return 1
-    for package in ("fastapi", "uvicorn", "httpx"):
+    for package in ("fastapi", "uvicorn", "httpx", "langgraph", "yaml"):
         if importlib.util.find_spec(package) is None:
             notice(f"缺少运行依赖 {package}。请在项目目录执行：\npython -m pip install -r requirements.txt -i https://pypi.org/simple")
             return 1

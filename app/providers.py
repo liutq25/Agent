@@ -20,6 +20,40 @@ class EmbeddingProvider(Protocol):
     async def embed_query(self, text: str) -> list[float]: ...
 
 
+class OpenAICompatibleEmbeddingProvider:
+    """Standalone embedding adapter; configuration is independent of chat."""
+    def __init__(self, model: str, url: str, key: str, timeout: int = 30):
+        self.model, self.url, self.key, self.timeout = model, url.rstrip("/"), key, timeout
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        if not self.key:
+            raise RuntimeError("Embedding API Key is missing")
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(self.url + "/embeddings",
+                json={"model": self.model, "input": texts},
+                headers={"Authorization": f"Bearer {self.key}"})
+            response.raise_for_status()
+            rows = sorted(response.json()["data"], key=lambda row: row["index"])
+            if len(rows) != len(texts):
+                raise ValueError("Embedding response count mismatch")
+            return [row["embedding"] for row in rows]
+
+    async def embed_query(self, text: str) -> list[float]:
+        return (await self.embed_documents([text]))[0]
+
+
+def get_embedding_provider():
+    """Return None when no embedding service is configured; lexical retrieval remains available."""
+    load_local_env()
+    model, url, key = (os.getenv("EMBEDDING_MODEL", ""),
+                       os.getenv("EMBEDDING_BASE_URL", ""), os.getenv("EMBEDDING_API_KEY", ""))
+    if model and url and key:
+        return OpenAICompatibleEmbeddingProvider(model, url, key)
+    return None
+
+
 class StructuredChatMixin:
     async def structured_chat(self, messages, response_schema, *, temperature=0):
         instruction = {"role": "system", "content": "只输出一个有效的 JSON 对象，不要 Markdown 代码围栏。"}

@@ -20,6 +20,8 @@ def post(client, session_id, content):
 
 
 def test_wrong_claim_is_addressed_and_verified_then_summarized():
+    import app.main as main
+    from app.tutor_graph import finish_probe
     client = TestClient(app)
     sid = client.post("/api/chat/session", json={"student_id": "learner"}).json()["session_id"]
     first = post(client, sid, "我认为链表任何位置插入都 O(1)，因为只需改指针。")
@@ -27,9 +29,12 @@ def test_wrong_claim_is_addressed_and_verified_then_summarized():
     assert "可能存在这个问题" in first["answer"]
     assert "定位前驱" in first["answer"]
     assert first["probe"]["id"] == "DIAG-LINK-004"
+    graph_path = main.DB_PATH.with_name(main.DB_PATH.stem + "_graph.db")
+    assert graph_path.exists()
     second = post(client, sid, "直接改指针就是 O(1)，不用遍历。")
     assert second["diagnosis"]["status"] == "CONFIRMED"
     assert "正确理解" in second["answer"]
+    assert finish_probe(sid, answer="重复回答", path=graph_path) is None
     summary = post(client, sid, "我现在有哪些薄弱点？")
     assert summary["mode"] == "summary"
     assert "链表任意位置插入" in summary["answer"]
