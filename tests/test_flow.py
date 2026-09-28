@@ -139,8 +139,7 @@ def test_open_set_issue_is_kept_outside_known_catalog(tmp_path, monkeypatch):
         async def structured_chat(self, messages, response_schema, **kwargs):
             name = response_schema.__name__
             if name == "ConceptMap": return {"concepts": []}
-            if name == "EvidenceResult": return {"evidence": [{"quote": "我认为索引总会变快", "type": "reasoning_evidence"}]}
-            if name == "HypothesisResult": return {"hypotheses": [{"misconception_id": None, "issue_type": "reasoning_gap", "candidate_name": "混淆索引构建与查询成本", "related_concepts": [], "evidence_quotes": ["我认为索引总会变快"], "confidence": 0.66}]}
+            if name == "TurnAssessment": return {"evidence": [{"quote": "我认为索引总会变快", "type": "reasoning_evidence"}], "hypotheses": [{"misconception_id": None, "issue_type": "reasoning_gap", "candidate_name": "混淆索引构建与查询成本", "related_concepts": [], "evidence_quotes": ["我认为索引总会变快"], "confidence": 0.66}]}
             if name == "dict": return {"question": "建立索引的成本要计算吗？", "expected_answer": "需要", "mastered_pattern": "考虑构建成本", "misconception_pattern": "忽略构建成本"}
             if name == "VerificationResult": return {"outcome": "GAP", "evidence_quote": "不用计算构建成本", "explanation": "构建也有成本。", "confidence": 0.9}
             raise AssertionError(name)

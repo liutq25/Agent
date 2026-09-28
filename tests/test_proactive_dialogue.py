@@ -90,6 +90,38 @@ def test_model_misses_explicit_claim_but_pipeline_keeps_evidence():
     assert result["question"]["id"] == "DIAG-BST-001"
 
 
+def test_explicit_claim_uses_one_diagnostic_model_call():
+    class Model:
+        def __init__(self):
+            self.schemas = []
+
+        async def structured_chat(self, messages, response_schema, **kwargs):
+            self.schemas.append(response_schema.__name__)
+            return {"evidence": [{"quote": "我认为普通 BST 查找一定是 O(log n)",
+                                  "type": "reasoning_evidence"}],
+                    "hypotheses": [{"misconception_id": "DS-BST-02", "issue_type": "misconception",
+                                    "candidate_name": "把普通 BST 当成平衡树",
+                                    "related_concepts": ["BST_SEARCH"],
+                                    "evidence_quotes": ["我认为普通 BST 查找一定是 O(log n)"],
+                                    "confidence": .7}]}
+
+    model = Model()
+    result = asyncio.run(analyze_turn(model, "我认为普通 BST 查找一定是 O(log n)，因为每步排除一半。"))
+    assert model.schemas == ["TurnAssessment"]
+    assert result["question"]["id"] == "DIAG-BST-001"
+
+
+def test_self_reported_gap_still_prompts_when_model_misses_it():
+    class Model:
+        async def structured_chat(self, messages, response_schema, **kwargs):
+            return {}
+
+    result = asyncio.run(analyze_turn(Model(), "我总是弄混栈和队列，能讲讲区别吗？"))
+    assert result["hypotheses"][0]["issue_type"] == "knowledge_gap"
+    assert result["hypotheses"][0]["misconception_id"] is None
+    assert result["question"] is not None
+
+
 def test_new_question_interrupts_pending_probe():
     client = TestClient(app)
     sid = client.post("/api/chat/session", json={"student_id": "learner"}).json()["session_id"]
@@ -105,11 +137,9 @@ def test_new_question_interrupts_pending_probe():
 def test_self_reported_weakness_is_not_treated_as_proven_error():
     class Model:
         async def structured_chat(self, messages, response_schema, **kwargs):
-            if response_schema.__name__ == "EvidenceResult":
+            if response_schema.__name__ == "TurnAssessment":
                 return {"evidence": [{"quote": "我总是弄混", "type": "self_reported_gap"}],
-                        "is_question_only": False}
-            if response_schema.__name__ == "HypothesisResult":
-                return {"hypotheses": [{"misconception_id": "DS-STACK-01",
+                        "hypotheses": [{"misconception_id": "DS-STACK-01",
                     "issue_type": "misconception", "candidate_name": "栈和队列概念不牢",
                     "related_concepts": ["STACK_LIFO"], "evidence_quotes": ["我总是弄混"],
                     "confidence": .65}]}
@@ -212,7 +242,8 @@ def test_heap_explanation_followup_stays_on_heap_and_does_not_probe(monkeypatch)
     assert model.chat_calls == 1
     assert model.structured_calls == 1  # premise check found no validated hypothesis
     second = post(client, sid, "我觉得在堆建好之后数组就是排序的，我们需要遍历数组才能把需要的数据找出来")
-    assert second["diagnosis"]["status"] == "OBSERVED"
+    assert second["diagnosis"]["status"] == "SUSPECTED"
+    assert second["probe"]["id"] == "DIAG-HEAP-001"
     before = model.structured_calls
     third = post(client, sid, "那真正的实现是什么样子的")
     assert third["mode"] == "answer"

@@ -60,6 +60,12 @@ class HypothesisResult(BaseModel):
     hypotheses: list[Hypothesis] = []
 
 
+class TurnAssessment(BaseModel):
+    evidence: list[EvidenceSpan] = []
+    hypotheses: list[Hypothesis] = []
+    is_question_only: bool = False
+
+
 class VerificationResult(BaseModel):
     outcome: str = "UNCERTAIN"
     evidence_quote: str = ""
@@ -92,9 +98,9 @@ def shortlist_concepts(text: str, limit: int = 15) -> list[dict]:
 
 def mock_concept_map(text: str) -> list[dict]:
     aliases = {
-        "顺序表": "ARRAY_INSERTION", "数组": "ARRAY_INSERTION", "链表": "LINKED_LIST_INSERTION",
+        "堆": "HEAP_PROPERTY", "顺序表": "ARRAY_INSERTION", "数组": "ARRAY_INSERTION", "链表": "LINKED_LIST_INSERTION",
         "栈": "STACK_LIFO", "队列": "QUEUE_FIFO", "二叉搜索树": "BST_SEARCH",
-        "BST": "BST_SEARCH", "堆": "HEAP_PROPERTY",
+        "BST": "BST_SEARCH",
     }
     for phrase, concept_id in aliases.items():
         if phrase.lower() in text.lower():
@@ -131,12 +137,62 @@ def known_hypothesis_fallback(text: str, concepts: list[dict]) -> list[dict]:
         candidate = "DS-LINK-02"
     elif "BST_SEARCH" in concept_ids and re.search(r"(一定|总是|永远|肯定).{0,15}(log|对数)", text, re.I):
         candidate = "DS-BST-02"
+    elif "HEAP_PROPERTY" in concept_ids and re.search(r"(?:堆.{0,6}(?:建好|建完|建成)|(?:建好|建完|建立|建成).{0,6}堆).{0,16}(?:已经|就是|完全).{0,6}(?:排好序|有序|排序)", text):
+        candidate = next((item["id"] for item in MISCONCEPTIONS
+                          if "HEAP_PROPERTY" in item["concept_ids"] and "堆" in item["name"] and "有序" in item["name"]), None)
     if candidate:
         item = MISCONCEPTION_BY_ID[candidate]
         return [{"misconception_id": candidate, "issue_type": "misconception",
                  "candidate_name": item["name"], "related_concepts": item["concept_ids"],
                  "evidence_quotes": [text], "confidence": .65}]
     return []
+
+
+async def assess_explicit_turn(provider, text: str, concepts: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Assess a student's statement in one bounded model call."""
+    evidence_type = "self_reported_gap" if self_reported_gap(text) else "reasoning_evidence"
+    candidates = [item for item in MISCONCEPTIONS
+                  if {entry["id"] for entry in concepts}.intersection(item["concept_ids"])]
+    compact = [{"id": item["id"], "name": item["name"]} for item in candidates[:8]]
+    prompt = ("判断学生当前原话中的明确主张或自述薄弱点，最多提出两个待核验假设。"
+              "提问、引用别人的错误说法、假设情境不能当成学生已犯错的证据。"
+              "每条 evidence.quote 必须是原话连续片段；hypotheses.evidence_quotes 必须引用 evidence.quote。"
+              "自述不会只能是 knowledge_gap，不能推断具体误区；无法确定就返回空 hypotheses。"
+              "可使用目录 ID，也可提出开放假设；不要硬套目录。"
+              "输出 JSON: evidence:[{quote,type}], hypotheses:[{misconception_id,issue_type,candidate_name,"
+              "related_concepts,evidence_quotes,confidence}],is_question_only。"
+              f"\n相关概念：{[item['id'] for item in concepts]}\n可选误区：{compact}\n学生原话：{text}")
+    raw = await provider.structured_chat([{"role": "user", "content": prompt}], TurnAssessment)
+    evidence = _validated_quotes(text, raw.get("evidence", []))
+    if not evidence:
+        evidence = [{"quote": text, "type": evidence_type}]
+    only_self_report = evidence_type == "self_reported_gap"
+    if only_self_report:
+        evidence = [{**entry, "type": "self_reported_gap"} for entry in evidence]
+    valid_quotes = {entry["quote"] for entry in evidence}
+    known_ids = {entry["id"] for entry in concepts}
+    hypotheses = []
+    for item in raw.get("hypotheses", [])[:2]:
+        quotes = [quote for quote in item.get("evidence_quotes", []) if quote in valid_quotes]
+        if not quotes:
+            continue
+        mid = item.get("misconception_id")
+        if only_self_report or mid not in MISCONCEPTION_BY_ID or not known_ids.intersection(MISCONCEPTION_BY_ID[mid]["concept_ids"]):
+            mid = None
+        confidence = min(1.0, max(0.0, float(item.get("confidence") or 0)))
+        hypotheses.append({"misconception_id": mid,
+                           "issue_type": "knowledge_gap" if only_self_report else item.get("issue_type", "knowledge_gap"),
+                           "candidate_name": str(item.get("candidate_name") or ""),
+                           "related_concepts": [cid for cid in item.get("related_concepts", []) if cid in CONCEPT_BY_ID],
+                           "evidence_quotes": quotes, "confidence": confidence})
+    if not hypotheses and not only_self_report:
+        hypotheses = known_hypothesis_fallback(text, concepts)
+    if not hypotheses and only_self_report:
+        hypotheses = [{"misconception_id": None, "issue_type": "knowledge_gap",
+                       "candidate_name": "学生自述该知识点理解不稳",
+                       "related_concepts": [entry["id"] for entry in concepts],
+                       "evidence_quotes": [evidence[0]["quote"]], "confidence": .55}]
+    return evidence, hypotheses
 
 
 async def map_concepts(provider, text: str, context: str = "") -> list[dict]:
@@ -313,8 +369,12 @@ async def analyze_turn(provider, text: str, used_questions: set[str] | None = No
                        context: str = "", approved_questions: list[dict] | None = None,
                        student_profile: dict | None = None) -> dict:
     concepts = await map_concepts(provider, text, context)
-    extracted = await extract_evidence(provider, text)
-    hypotheses = await generate_hypotheses(provider, text, concepts, extracted["evidence"])
+    if not isinstance(provider, MockProvider) and (explicit_claim(text) or self_reported_gap(text)):
+        evidence, hypotheses = await assess_explicit_turn(provider, text, concepts)
+        extracted = {"evidence": evidence, "is_question_only": False}
+    else:
+        extracted = await extract_evidence(provider, text)
+        hypotheses = await generate_hypotheses(provider, text, concepts, extracted["evidence"])
     premise = None
     if extracted["is_question_only"] and not hypotheses:
         premise = await assess_question_premise(provider, text, concepts)
