@@ -21,7 +21,7 @@ from .conversation import answer_question, is_coding_request
 from .code_lab import EXERCISES as CODE_EXERCISES, sandbox_ready, run_tests, feedback as code_feedback
 from .algorithm_tools import TOOLS as ALGORITHM_TOOLS, execute_tool, compare_student_trace
 from .tool_routing import select_and_run_tool
-from .diagnostic_pipeline import analyze_turn, verify_answer, mock_concept_map, CONCEPT_BY_ID, MISCONCEPTION_BY_ID
+from .diagnostic_pipeline import analyze_turn, verify_answer, mock_concept_map, CONCEPT_BY_ID, MISCONCEPTION_BY_ID, QUESTIONS as DIAGNOSTIC_QUESTIONS
 from .diagnostic_trace import DiagnosticTraceRecorder, EventType, record_initial, record_verification
 
 DB_PATH = Path(os.getenv("COGNITUTOR_DB", str(Path(__file__).resolve().parent.parent / "data" / "cognitutor.db")))
@@ -50,6 +50,8 @@ def db():
     CREATE TABLE IF NOT EXISTS student_misconception_state(student_id TEXT NOT NULL, misconception_id TEXT NOT NULL, risk REAL NOT NULL, PRIMARY KEY(student_id, misconception_id));
     CREATE TABLE IF NOT EXISTS documents(id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS document_vectors(source_id TEXT PRIMARY KEY, vector_json TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS question_bank(id TEXT PRIMARY KEY, question_json TEXT NOT NULL, status TEXT NOT NULL, reviewer TEXT, review_notes TEXT, reviewed_at TEXT, created_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS question_bank_revisions(question_id TEXT NOT NULL, version INTEGER NOT NULL, question_json TEXT NOT NULL, editor TEXT NOT NULL, edited_at TEXT NOT NULL, PRIMARY KEY(question_id,version));
     CREATE TABLE IF NOT EXISTS chat_sessions(id TEXT PRIMARY KEY, student_id TEXT NOT NULL, class_id TEXT NOT NULL, pending_json TEXT, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS chat_messages(id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, meta_json TEXT NOT NULL, created_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS code_submissions(id TEXT PRIMARY KEY, student_id TEXT NOT NULL, class_id TEXT NOT NULL, exercise_id TEXT NOT NULL, source TEXT NOT NULL, result_json TEXT NOT NULL, feedback TEXT NOT NULL, hint_stage INTEGER NOT NULL, created_at TEXT NOT NULL);
@@ -82,6 +84,54 @@ class MessageInput(BaseModel):
 class DocumentInput(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1, max_length=100000)
+
+
+class QuestionBankInput(BaseModel):
+    id: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
+    question: str = Field(min_length=10, max_length=1000)
+    expected_answer: str = Field(min_length=3, max_length=1500)
+    concept_ids: list[str] = Field(min_length=1)
+    diagnostic_targets: list[str] = Field(default_factory=list)
+    discriminates: dict[str, str] = Field(default_factory=dict)
+    follow_up_if_unclear: str = Field(min_length=3, max_length=500)
+    difficulty: int = Field(default=2, ge=1, le=5)
+    task_type: str = "CONCEPTUAL"
+    source_url: str | None = None
+
+
+class QuestionReviewInput(BaseModel):
+    reviewer: str = Field(min_length=2, max_length=100)
+    approved: bool
+    notes: str = Field(default="", max_length=1000)
+
+
+class QuestionEditInput(BaseModel):
+    question: QuestionBankInput
+    editor: str = Field(min_length=2, max_length=100)
+
+
+def approved_questions(connection) -> list[dict]:
+    return [json.loads(row[0]) for row in connection.execute(
+        "SELECT question_json FROM question_bank WHERE status='APPROVED' ORDER BY id")]
+
+
+def validate_question_bank(body: QuestionBankInput):
+    if body.id in {item["id"] for item in DIAGNOSTIC_QUESTIONS}:
+        raise HTTPException(409, "题目 ID 与内置题重复")
+    if any(cid not in CONCEPT_BY_ID for cid in body.concept_ids):
+        raise HTTPException(400, "包含未知知识点 ID")
+    if any(mid not in MISCONCEPTION_BY_ID for mid in body.diagnostic_targets):
+        raise HTTPException(400, "包含未知误区 ID")
+    if any(not set(MISCONCEPTION_BY_ID[mid]["concept_ids"]).intersection(body.concept_ids)
+           for mid in body.diagnostic_targets):
+        raise HTTPException(400, "误区目标与题目知识点不关联")
+    if body.task_type not in {"CONCEPTUAL", "COMPLEXITY", "TRACE", "CODE_READING",
+                              "DATA_STRUCTURE_CONSTRUCTION", "ALGORITHM_COMPARISON", "PROOF_OR_REASONING"}:
+        raise HTTPException(400, "未知题型")
+    if not body.discriminates.get("mastered") or not body.discriminates.get("misconception"):
+        raise HTTPException(400, "必须写出两种理解状态的区分标准")
+    if body.source_url and not body.source_url.startswith("https://"):
+        raise HTTPException(400, "来源链接必须使用 HTTPS")
 
 
 async def course_context(connection, query: str) -> list[dict]:
@@ -308,7 +358,9 @@ async def chat_message(session_id: str, body: ChatMessageInput):
                 explanation = await answer_question(provider, body.content, history, cards,
                                                     context_hint=tool_context + "\n" + format_context(course_hits),
                                                     code_stage=code_stage)
-                analysis = await analyze_turn(provider, body.content, used, context=context)
+                analysis = await analyze_turn(provider, body.content, used, context=context,
+                                              approved_questions=approved_questions(connection),
+                                              student_profile=profile(connection, session["student_id"]))
                 analysis["tool_run"] = tool_run
                 question = analysis["question"]
                 if question:
@@ -790,6 +842,72 @@ def get_evidence(student_id: str):
 @app.get("/api/questions/recommend")
 def questions_recommend(student_id: str = "demo-student"):
     with db() as connection: return recommend(profile(connection, student_id))
+
+
+@app.get("/api/questions/bank", dependencies=[Depends(require_admin)])
+def list_question_bank():
+    with db() as connection:
+        return [{"question": json.loads(row["question_json"]), "status": row["status"],
+                 "reviewer": row["reviewer"], "review_notes": row["review_notes"],
+                 "reviewed_at": row["reviewed_at"]}
+                for row in connection.execute("SELECT * FROM question_bank ORDER BY created_at DESC")]
+
+
+@app.post("/api/questions/bank", dependencies=[Depends(require_admin)])
+def add_question_bank(body: QuestionBankInput):
+    validate_question_bank(body)
+    record = body.model_dump()
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as connection:
+        try:
+            connection.execute("INSERT INTO question_bank VALUES(?,?,?,?,?,?,?)",
+                (body.id, json.dumps(record, ensure_ascii=False), "DRAFT", None, None, None, now))
+            connection.execute("INSERT INTO question_bank_revisions VALUES(?,?,?,?,?)",
+                (body.id, 1, json.dumps(record, ensure_ascii=False), "local-admin", now))
+        except sqlite3.IntegrityError as error:
+            raise HTTPException(409, "题目 ID 已存在") from error
+    return {"id": body.id, "status": "DRAFT"}
+
+
+@app.put("/api/questions/bank/{question_id}", dependencies=[Depends(require_admin)])
+def edit_question_bank(question_id: str, body: QuestionEditInput):
+    if question_id != body.question.id:
+        raise HTTPException(400, "题目 ID 不可修改")
+    validate_question_bank(body.question)
+    record = json.dumps(body.question.model_dump(), ensure_ascii=False)
+    now = datetime.now(timezone.utc).isoformat()
+    with db() as connection:
+        row = connection.execute("SELECT id FROM question_bank WHERE id=?", (question_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "题目不存在")
+        version = connection.execute("SELECT COALESCE(MAX(version),0)+1 FROM question_bank_revisions WHERE question_id=?",
+                                     (question_id,)).fetchone()[0]
+        connection.execute("INSERT INTO question_bank_revisions VALUES(?,?,?,?,?)",
+                           (question_id, version, record, body.editor, now))
+        connection.execute("UPDATE question_bank SET question_json=?,status='DRAFT',reviewer=NULL,review_notes=NULL,reviewed_at=NULL WHERE id=?",
+                           (record, question_id))
+    return {"id": question_id, "status": "DRAFT", "version": version}
+
+
+@app.get("/api/questions/bank/{question_id}/revisions", dependencies=[Depends(require_admin)])
+def question_bank_revisions(question_id: str):
+    with db() as connection:
+        return [{"version": row["version"], "question": json.loads(row["question_json"]),
+                 "editor": row["editor"], "edited_at": row["edited_at"]}
+                for row in connection.execute("SELECT * FROM question_bank_revisions WHERE question_id=? ORDER BY version",
+                                              (question_id,))]
+
+
+@app.put("/api/questions/bank/{question_id}/review", dependencies=[Depends(require_admin)])
+def review_question_bank(question_id: str, body: QuestionReviewInput):
+    with db() as connection:
+        row = connection.execute("SELECT * FROM question_bank WHERE id=?", (question_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "题目不存在")
+        status = "APPROVED" if body.approved else "REJECTED"
+        connection.execute("UPDATE question_bank SET status=?, reviewer=?, review_notes=?, reviewed_at=? WHERE id=?",
+            (status, body.reviewer, body.notes, datetime.now(timezone.utc).isoformat(), question_id))
+    return {"id": question_id, "status": status, "reviewer": body.reviewer}
 
 
 @app.post("/api/documents", dependencies=[Depends(require_admin)])

@@ -222,16 +222,31 @@ def confidence_gate(hypotheses: list[dict]) -> str:
     return "VERIFY" if peak >= 0.8 else "PROBE"
 
 
-def select_question(concepts: list[dict], hypotheses: list[dict], used_ids: set[str] | None = None) -> dict | None:
+def select_question(concepts: list[dict], hypotheses: list[dict], used_ids: set[str] | None = None,
+                    approved_questions: list[dict] | None = None,
+                    student_profile: dict | None = None) -> dict | None:
     used_ids = used_ids or set()
     mids = {item["misconception_id"] for item in hypotheses if item.get("misconception_id")}
     cids = {item["id"] for item in concepts}
     cids.update(cid for item in hypotheses for cid in item.get("related_concepts", []))
     ranked = []
-    for question in QUESTIONS:
+    mastery = (student_profile or {}).get("mastery", {})
+    risks = (student_profile or {}).get("misconception_risk", {})
+    assistance = (student_profile or {}).get("support_dependency", {}).get("recent_mean_hint_level")
+    for question in [*QUESTIONS, *(approved_questions or [])]:
         if question["id"] in used_ids:
             continue
-        score = 3 * len(mids.intersection(question["diagnostic_targets"])) + len(cids.intersection(question["concept_ids"]))
+        targets = set(question.get("diagnostic_targets", []))
+        concepts_for_question = set(question.get("concept_ids", []))
+        score = 3 * len(mids.intersection(targets)) + len(cids.intersection(concepts_for_question))
+        if score:
+            score += sum((1 - mastery.get(cid, .5)) * .2 for cid in concepts_for_question)
+            score += sum(risks.get(mid, 0) * .2 for mid in targets)
+            known = [mastery[cid] for cid in concepts_for_question if cid in mastery]
+            target_difficulty = 1 + round((sum(known) / len(known) if known else .5) * 4)
+            if assistance is not None and assistance >= 1:
+                target_difficulty = max(1, target_difficulty - 1)
+            score += .05 * (5 - abs(question.get("difficulty", 2) - target_difficulty))
         if score:
             ranked.append((score, question["id"], question))
     return max(ranked, default=(0, "", None))[2]
@@ -295,7 +310,8 @@ async def assess_question_premise(provider, text: str, concepts: list[dict]) -> 
 
 
 async def analyze_turn(provider, text: str, used_questions: set[str] | None = None,
-                       context: str = "") -> dict:
+                       context: str = "", approved_questions: list[dict] | None = None,
+                       student_profile: dict | None = None) -> dict:
     concepts = await map_concepts(provider, text, context)
     extracted = await extract_evidence(provider, text)
     hypotheses = await generate_hypotheses(provider, text, concepts, extracted["evidence"])
@@ -313,7 +329,8 @@ async def analyze_turn(provider, text: str, used_questions: set[str] | None = No
     # the student's own statement supplies a concrete, testable concern.
     question = premise["question"] if premise else None
     if question is None and gate in ("PROBE", "VERIFY"):
-        question = select_question(concepts, hypotheses, used_questions)
+        question = select_question(concepts, hypotheses, used_questions,
+                                   approved_questions, student_profile)
         if question is None:
             question = await generate_open_question(provider, text, concepts, hypotheses)
     return {"concepts": concepts, "evidence": extracted["evidence"], "hypotheses": hypotheses,

@@ -6,7 +6,7 @@
 
 ## Completed
 
-比赛公开资料检索；两候选上游许可与运行依赖检查；FastAPI/SQLite API；自由对话和主动核验；分阶段概念映射、证据抽取、已知与目录外假设、置信度门槛、核验及 Beta 证据状态；结构化 Diagnostic Trace、证据/假设关联、教师时间线；22 个确定性算法工具；编程求助完整代码输出限制及三级提示；两个 Python 练习的 Docker 隔离运行接口；教师端活动、资料上传和可选管理口令；课程资料分片检索、5 条带来源的公开资源摘要、独立可选 Embedding 接口；核验题 LangGraph interrupt/SQLite 检查点；待审核 Benchmark 候选与正式审核门槛；GUI 模型设置、OpenAI-compatible/Anthropic/Gemini 三协议适配器；Windows 一键启动入口。
+比赛公开资料检索；两候选上游许可与运行依赖检查；FastAPI/SQLite API；自由对话和主动核验；分阶段概念映射、证据抽取、已知与目录外假设、置信度门槛、核验及 Beta 证据状态；结构化 Diagnostic Trace、证据/假设关联、教师时间线；22 个确定性算法工具；编程求助完整代码输出限制及三级提示；两个 Python 练习的 Docker 隔离运行接口；教师端活动、资料上传、诊断题草稿审核和可选管理口令；课程资料分片检索、5 条带来源的公开资源摘要、独立可选 Embedding 接口；核验题 LangGraph interrupt/SQLite 检查点；待审核 Benchmark 候选与正式审核门槛；GUI 模型设置、OpenAI-compatible/Anthropic/Gemini 三协议适配器；Windows 一键启动入口。
 
 ## In Progress
 
